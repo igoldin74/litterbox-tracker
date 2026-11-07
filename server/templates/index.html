@@ -1,0 +1,25 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Litter Tracker</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>body{font-family:system-ui;max-width:900px;margin:0 auto;padding:20px;background:#f7f7f5} .card{background:#fff;border-radius:12px;padding:16px;margin:12px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)} .stats{display:flex;gap:12px} .stat{flex:1;text-align:center} .stat b{font-size:28px;display:block} table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #eee;text-align:left} button{border:0;background:#111;color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer}</style>
+</head><body>
+<h1>Litter Box Tracker</h1>
+<div class="card stats"><div class="stat"><b id="today">-</b>Visits today</div><div class="stat"><b id="week">-</b>Last 7 days</div><div class="stat"><b id="avg">-</b>Avg duration (s)</div></div>
+<div class="card"><h3>Visits per day</h3><canvas id="chart"></canvas><p><select id="range"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></p></div>
+<div class="card"><h3>Recent visits</h3><table><thead><tr><th>Start</th><th>Duration</th><th>Peak weight</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+<script>
+let chart;
+async function load(){
+  const days=document.getElementById('range').value;
+  const visits=await (await fetch('/api/visits?days='+days)).json();
+  const daily=await (await fetch('/api/stats/daily?days='+days)).json();
+  const today=new Date().toISOString().slice(0,10);
+  document.getElementById('today').textContent=visits.filter(v=>v.start_time.startsWith(today)).length;
+  document.getElementById('week').textContent=visits.filter(v=>{let d=new Date(v.start_time);return (Date.now()-d)>0 && (Date.now()-d)<7*864e5}).length;
+  document.getElementById('avg').textContent=visits.length?Math.round(visits.reduce((a,v)=>a+v.duration_sec,0)/visits.length):0;
+  if(chart) chart.destroy();
+  chart=new Chart(document.getElementById('chart'),{type:'bar',data:{labels:daily.map(d=>d.day),datasets:[{label:'Visits',data:daily.map(d=>d.count)}]},options:{scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  document.getElementById('rows').innerHTML=visits.slice(0,50).map(v=>`<tr><td>${new Date(v.start_time).toLocaleString()}</td><td>${Math.round(v.duration_sec)}s</td><td>${v.peak_weight_kg?.toFixed(2)||'-'} kg</td><td><button onclick="del(${v.id})">Delete</button></td></tr>`).join('');
+}
+async function del(id){await fetch('/api/visits/'+id,{method:'DELETE'});load();}
+document.getElementById('range').onchange=load; load(); setInterval(load,30000);
+</script></body></html>
